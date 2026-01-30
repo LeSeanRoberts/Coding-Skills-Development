@@ -1,0 +1,219 @@
+---
+title: "PART 1 - REGRESSION MODELLING"
+format: pdf
+editor: visual
+---
+
+## Regression Modelling
+
+> **The goal of this analysis is to examine the relationship between basic school characteristics and the availability of WiFi-enabled devices in U.S. public schools.** Using the `ccd_devices.csv` dataset, I first summarize reported device availability across schools, then estimate a simple regression model to quantify how a selected school characteristic is associated with whether a school reports having sufficient WiFi-enabled devices. Finally, I extend the initial model by incorporating additional school characteristics to assess whether a slightly richer specification improves model performance. The analysis is descriptive in nature and is intended to demonstrate data preparation, model implementation, and clear interpretation of results rather than causal inference.
+
+**Dataset:** `ccd_devices.csv`\
+
+**Outcome:** `SCH_INTERNET_WIFIENDEV`\
+
+**Missing values:** coded as `99`
+
+Importing the data set:
+
+```{r, message = FALSE, warning = FALSE}
+
+# Data assimilation
+
+library(readr)
+ccd_devices <- read_csv("C:/Users/verlene/Downloads/Coding+Test+L2+Datafiles/Coding Test L2 Datafiles/ccd_devices.csv")
+
+# Data Wrangling tools
+library(tidyverse)
+
+# Obersving the data
+
+str(ccd_devices)
+```
+
+Acquiring a tibble or dataframe for data wrangling with the appropriate labeling for the observed instances of 99:
+
+```{r}
+
+library(tidyverse)
+df_manipul <- ccd_devices |>
+  mutate(across(where(is.numeric), ~ na_if(., 99)))
+
+str(df_manipul)
+```
+
+### Determining the Quantity of Schools that Report Sufficient Enough Wifi-Enabled Devices
+
+Implementing a **descriptive count**, rather than descriptive statistics since most attributes are character or logical based.
+
+```{r}
+
+# Counts for target
+count(df_manipul, SCH_INTERNET_WIFIENDEV)
+
+```
+
+This count portrays how many schools report having sufficient WiFi-enabled devices, how many report insufficient devices, and how many have missing data for this measure.
+
+In `ccd_devices.csv`, `SCH_INTERNET_WIFIENDEV` (“Does the school report having enough WiFi-enabled devices?”) is **binary-coded**, not logical:
+
+-    `1` → **Yes**, the school reports having enough WiFi-enabled devices
+
+-   `0` → **No**, the school reports *not* having enough
+
+-    `99` to NA → **Missing / not reported**
+
+### Common Regression Model (LOGIT)
+
+The choice of model is logistic/logit regression. Such choice is due to the **target** `SCH_INTERNET_WIFIENDEV` (“Does the school report having enough WiFi-enabled devices?”) being binary (1 or 0 as the outcome). the predictor or feature chosen is **total student enrollment (`TOT_ENR_M`)**. Reason being, schools with greater student populations in general are likely to require greater device capacity and may receive more resources to support technology access; assuming the programs and policies for such devices are sustainable.
+
+Logit regression (or logistic regression) is a statistical model used for binary classification, where the outcome $Y$ is categorical, typically coded as 0 or 1 (e.g., "fail" vs. "success", "no" vs. "yes"). It maps a linear combination of predictors to a probability value between 0 and 1.
+
+The binary status is modeled using a weighted generalized linear model:
+
+$$\text{Pr}(Y_{i}^{(1)}=1) = \text{logit}^-1(\alpha + \mathbf{X}_i\beta + u_{p(i)})$$
+
+where $\,u_{p(i)}\,\sim\,\mathcal{N}(0 \sigma_{u}^2)\,$ captures unobserved poverty-unit heterogeneity. Estimation uses survey-weighted maximum likelihood (Hosmer et al., 2013).
+
+The basic probability model for logit regression based on the sigmoid function:
+
+The predicted probability $p$ that a binary outcome $Y$ equals 1, given input features $X=(x_1\,...\,,x_k)\,$, is:
+
+$$\pi(X) = P(Y=1|X) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 X_1 + \ldots + \beta_k X_k)}}$$
+
+$P(Y=1|X)$: The probability of the "success" or target outcome, often denoted as $p(x)$. Here $Y=1$ is like "yes" or "true" for device access sufficiency.
+
+**Argument for using “high school” (SCH_UGDETAIL_HS):**
+
+High schools are likely to have different device needs and resource access than elementary or middle schools, because:
+
+1.  they often require **more devices per student** for specialized classes (labs, STEM, AP courses),
+2.  they may have **different funding structures**, and
+3.  they often use more **individual device-dependent learning**, especially for advanced coursework.
+
+So using **SCH_UGDETAIL_HS** allows us to test whether being a high school is associated with **higher or lower odds of reporting sufficient WiFi devices**.
+
+Constructing the logit model:
+
+```{r}
+
+# Logit model development
+model_simple <- glm(
+  SCH_INTERNET_WIFIENDEV ~ SCH_UGDETAIL_HS,
+  data = df_manipul,
+  family = binomial()
+)
+
+summary(model_simple)
+
+```
+
+**Note:** for the **`glm()`** function in R, it handles logical variables automatically, and you do not need to manually encode them as 0/1.
+
+-   **FALSE** is treated as **0** (the reference level).
+
+-   **TRUE** is treated as **1**.
+
+### **Interpretation of Logistic Regression Output**
+
+The logistic regression model examines the relationship between school type and the likelihood of having internet or Wi-Fi enabled devices. The dependent variable, **SCH_INTERNET_WIFIENDEV**, is binary, indicating whether a school has internet/Wi-Fi devices. The independent variable, **SCH_UGDETAIL_HS**, is also binary and identifies whether the school is classified as a high school. The model was estimated using a binomial family, appropriate for binary outcomes, and provides coefficients that represent changes in log-odds.
+
+The intercept in the model is estimated at **1.4722** and is statistically significant $p < 0.001 \approx 2e^{-16}$. This intercept represents the log-odds of having internet or Wi-Fi devices for the reference category, which is schools that are **not** high schools. When transformed into a probability, the intercept corresponds to an approximate **81% probability** that a non-high school has internet or Wi-Fi devices. This suggests that, in the absence of the high school indicator, the baseline likelihood of having internet/Wi-Fi is relatively high.
+
+The coefficient for **SCH_UGDETAIL_HSTRUE** is **-1.6263**, and it is statistically significant at the 1% level ($p < 0.001 \approx\,0.00354$). The negative sign of this coefficient indicates that being a high school is associated with a decrease in the likelihood of having internet or Wi-Fi devices. In practical terms, this coefficient means that high schools have lower odds of possessing internet/Wi-Fi devices compared to non-high schools. Converting the log-odds coefficient to an odds ratio yields **0.197**, which implies that high schools have approximately **80% lower odds** of having internet or Wi-Fi devices than non-high schools. This result is both statistically significant and substantively meaningful, suggesting a substantial disparity in internet access between school types.
+
+The model fit statistics provide additional context for evaluating the strength of the relationship. The null deviance is **4786.8**, and the residual deviance is **4778.7**, indicating a modest improvement when the high school indicator is included. While the reduction in deviance is not large, the significance of the predictor indicates that school type still contributes meaningful explanatory power. The Akaike Information Criterion (AIC) is **4782.7**, which provides a measure of model quality relative to other possible models; lower AIC values would indicate better fit.
+
+Overall, the logistic regression results suggest that non-high schools are more likely to have internet or Wi-Fi enabled devices, whereas high schools have significantly lower odds of such access. The findings point to an important inequality in technological resources across school types, highlighting the need for further investigation into the factors driving this disparity and potential policy interventions to ensure equitable access to internet infrastructure in high schools.
+
+### Critical Caveats
+
+While the model is "okay" from a technical standpoint, you should be aware of the following:
+
+-   **Extreme Sparsity:** Only **13 schools** in the dataset have `SCH_UGDETAIL_HS = TRUE`. Out of those 13, 7 lack the device and 6 have it. Because this group is so small, your results are very sensitive to those few data points. Adding or changing just one or two schools in that category could drastically change your coefficients.
+
+    ```{r}
+    HS_TRUE <- df_manipul |>
+      filter(SCH_UGDETAIL_HS == TRUE)
+    dim(HS_TRUE)
+    ```
+
+-   **Variable Meaning:** The feature `SCH_UGDETAIL_HS` likely may not refer to all high schools **"Ungraded Detail - High School"** rather than all High Schools. Standard high schools (like "Pioneer High School" in your data) are marked as `FALSE` for this flag. Essentially there's comparing "Ungraded/Specialized High School programs" against all other types of schools.
+
+    ```{r}
+
+    PIONEER_HS <- df_manipul |>
+      filter(SCH_NAME == "Pioneer High School")
+    str(PIONEER_HS)
+    ```
+
+    There's also concern that special education schools can possibly be high schools.
+
+-   **Model Fit:** The **Pseudo R-squared** is very low (approx. 0.0017). This indicates that while the feature is significant, it explains a very tiny fraction of the overall variation in WIFI device availability.
+
+-   **Summary:** making a claim based on only **13 "True" instances**, thus to frame the conclusion cautiously. It's a valid finding for this specific sample, but it may not generalize well to the broader population of schools.
+
+### Improving the Model
+
+Adding other grade levels to the model is an attempt to acquire a structural model, to be versatile or more practical concerning anlaysis for youths, namely, the span of adolescents to young adults, including special needs individuals. Feature importance/selection without cognitive bias methods, like tree models, recursive feature elimination, etc. aren't immediate concerns to be implemented. Structural analysis or investigative interests can be viewed as immediate. A research question like “What type of schools are more likely to report having enough WiFi-enabled devices?” becomes realistic. Such investigating has multiple applications, such as marketing, policy development/management and so forth. How many additional features is not an issue, rather, what can be learnt from the structural development. Hence, will apply all features (except SCHID and SCH_NAME since they are only identifiers).
+
+```{r}
+
+# Logit model development with all features
+model_simple <- glm(
+  SCH_INTERNET_WIFIENDEV ~ SCH_UGDETAIL_HS +
+    SCH_UGDETAIL_ES + SCH_UGDETAIL_MS + SCH_STATUS_SPED +
+    SCH_STATUS_MAGNET + SCH_STATUS_CHARTER + SCH_STATUS_ALT +
+    SCH_MAGNETDETAIL,
+  data = df_manipul,
+  family = binomial()
+)
+
+summary(model_simple)
+```
+
+### Interpreting the Model for Multiple Features or Characteristics
+
+The acquired "structural" logit model has the following analysis:
+
+1.  **The "Singularity" (The "NA" for Middle Schools)**
+
+Observe that `SCH_UGDETAIL_MS` has `NA` for its estimates. This happens because of **perfect multicollinearity**. Scaling is a customaty remedy for such, but such may not be sensible for logic type attributes; there's generally no meaning between or outside of the true-false domain. In the dataset, there are only 4 schools marked as "Ungraded Middle School" (`SCH_UGDETAIL_MS`), and it's likely that their WiFi status is perfectly predicted by another variable or they all have the exact same outcome as another small group. R drops one to make the math work.
+
+```{r}
+MS <- df_manipul |>
+  select(SCH_UGDETAIL_MS) |>
+  filter (SCH_UGDETAIL_MS == TRUE)
+str(MS)
+```
+
+2.  **Significant Predictors (Observing the Star Labels)**
+
+The variables with stars are the ones statistically associated with device availability:
+
+-   **SCH_STATUS_ALT (Alternative Schools):** This is the strongest negative predictor (Estimate: -0.716, p<0.001). Alternative schools are significantly **less likely** to have these WiFi devices compared to regular schools.
+
+-   **SCH_STATUS_CHARTER (Charter Schools):** Also negative (Estimate: -0.386, p=0.00699). Charter schools in this sample have a lower probability of having the devices than non-charter schools.
+
+-   **SCH_UGDETAIL_HS (Ungraded High School):** Remains significant (Estimate: -2.00, p=0.00506). Even when controlling for other factors, these specific high school programs are much less likely to have the devices.
+
+3.  **Comprehending the Coefficients**
+
+Since this is a Logistic Regression, the estimates are in **log-odds**. To make sense of them, one must observe the direction and the exponentiated value (Odds Ratio).
+
+|  |  |  |
+|----|----|----|
+| Variable | Estimate | Impact on Likelihood |
+| **(Intercept)** | 1.528 | The "baseline." A regular, non-charter, non-magnet school has high odds (\~82% probability) of having the device. |
+| **Negative Coefficients** | (e.g., -2.00, -0.71) | These **decrease** the probability. Being an Alternative or Charter school "drags down" the likelihood of having WiFi devices. |
+| **Positive Coefficients** | (e.g., 2.01, 0.39) | These **increase** the probability. For example, `SCH_UGDETAIL_ES` has a positive estimate, but notice the p-value is high (0.14), meaning this effect might just be noise. |
+
+4.  **Model Fit Comparisons**
+
+**AIC:** The Akaike Information Criterion (AIC) for the single feature model had a value of 4782.7, while the model with covariates has an AIC value of 4768.2. **Rule:** a lower AIC is better. Hence, adding the extra features (Charter status, Alt status, etc., etc.) actually caused model improvement for explaining the data, despite it being more complex. The difference in AIC isn't great, thus realising the attribute SCH_UGDETAIL_HS as a significant contributor (or standing).
+
+**Residual Deviance:** from single feature to covariates, this dropped from 4778.7 to 4752.2. The drop of \~27 points for 6 (say, not including SCH_STATUS_MS) additional variables suggests that variables like `SCH_STATUS_ALT` and `SCH_STATUS_CHARTER` are providing meaningful information that the first model was missing.
+
+### Summary Interpretation for Logit Model with Covariates
+
+The data suggests a "digital divide" based on school type. If a school is an **Alternative school**, a **Charter school**, or an **Ungraded High School program**, it is statistically less likely to provide WiFi-enabled devices to students compared to "standard" schools. Magnet status and Special Education status (`SPED`) did not show a statistically significant impact at the 0.05 level (though SPED is very close at 0.06).
